@@ -3,13 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>KI-Bild-Erkennung mit Kamera-Modi</title>
+    <title>KI-Bild-Erkennung</title>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/knn-classifier"></script>
     <style>
         body { font-family: sans-serif; text-align: center; padding: 20px; }
         video { border: 2px solid #333; border-radius: 8px; margin-bottom: 10px; width: 100%; max-width: 400px; background: #eee; }
+        .status { color: #555; font-weight: bold; margin: 10px; min-height: 1.2em; }
         .controls { margin: 15px; }
         select { padding: 10px; margin-bottom: 10px; font-size: 16px; }
     </style>
@@ -17,7 +18,6 @@
 <body>
     <h1>KI-Lern-App</h1>
     
-    <!-- Kamera-Modus Auswahl -->
     <div>
         <select id="videoSource">
             <option value="user">Frontkamera</option>
@@ -26,6 +26,7 @@
     </div>
     
     <video id="video" autoplay playsinline></video>
+    <div id="status" class="status">Bereit...</div>
     
     <div class="controls">
         <input type="text" id="labelInput" placeholder="Was ist auf dem Bild?">
@@ -34,7 +35,7 @@
     </div>
 
     <div class="controls">
-        <button onclick="exportModel()">Modell herunterladen</button>
+        <button onclick="exportModel()">Daten sichern</button>
         <input type="file" id="importFile" onchange="importModel(event)">
     </div>
 
@@ -43,75 +44,80 @@
     <script>
         const video = document.getElementById('video');
         const videoSelect = document.getElementById('videoSource');
+        const statusDiv = document.getElementById('status');
         const classifier = knnClassifier.create();
         let net;
         let currentStream;
 
         async function setup() {
+            statusDiv.innerText = "Lade Modell...";
             net = await mobilenet.load();
             videoSelect.onchange = startStream;
             await startStream();
+            statusDiv.innerText = "Kamera aktiv.";
         }
 
         async function startStream() {
             if (currentStream) {
                 currentStream.getTracks().forEach(track => track.stop());
             }
-
-            const videoMode = videoSelect.value;
-            const constraints = {
-                video: { facingMode: { exact: videoMode } }
-            };
-
+            const constraints = { video: { facingMode: { exact: videoSelect.value } } };
             try {
                 currentStream = await navigator.mediaDevices.getUserMedia(constraints);
             } catch (err) {
-                // Fallback, falls 'exact' nicht unterstützt wird (z.B. Desktop)
-                console.warn("Kamera-Modus exakt nicht gefunden, versuche Standard...");
                 currentStream = await navigator.mediaDevices.getUserMedia({ video: true });
             }
-            
             video.srcObject = currentStream;
         }
 
+        function updateStatus(msg) { statusDiv.innerText = msg; }
+
         async function train() {
             const label = document.getElementById('labelInput').value;
-            if(!label) return alert("Bitte gib einen Namen ein!");
+            if(!label) return updateStatus("Bitte Namen eingeben!");
             const activation = net.infer(video, true);
             classifier.addExample(activation, label);
-            alert("Gelernt: " + label);
+            updateStatus("Gelernt: " + label);
         }
 
         async function predict() {
-            if(classifier.getNumClasses() === 0) return alert("Trainiere erst etwas!");
+            if(classifier.getNumClasses() === 0) return updateStatus("Bitte erst trainieren!");
             const activation = net.infer(video, true);
             const result = await classifier.predictClass(activation);
             document.getElementById('result').innerText = "Ergebnis: " + result.label;
+            updateStatus("Erkennung läuft...");
         }
 
         function exportModel() {
             const dataset = classifier.getClassifierDataset();
-            const tensors = {};
+            const jsonDataset = {};
             for (const key in dataset) {
-                tensors[key] = dataset[key].arraySync();
+                jsonDataset[key] = dataset[key].arraySync();
             }
-            const blob = new Blob([JSON.stringify(tensors)], {type: "application/json"});
+            const blob = new Blob([JSON.stringify(jsonDataset)], {type: "application/json"});
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
             a.download = "ki_modell.json";
             a.click();
+            updateStatus("Daten exportiert.");
         }
 
         function importModel(event) {
             const file = event.target.files[0];
             const reader = new FileReader();
             reader.onload = function(e) {
-                const dataset = JSON.parse(e.target.result);
-                for (const key in dataset) {
-                    classifier.addExample(tf.tensor2d(dataset[key]), key);
+                try {
+                    const jsonDataset = JSON.parse(e.target.result);
+                    const tensorDataset = {};
+                    for (const key in jsonDataset) {
+                        tensorDataset[key] = tf.tensor2d(jsonDataset[key]);
+                    }
+                    classifier.setClassifierDataset(tensorDataset);
+                    updateStatus("Modell geladen.");
+                } catch (err) {
+                    updateStatus("Fehler beim Laden!");
                 }
-                alert("Modell geladen!");
             };
             reader.readAsText(file);
         }
