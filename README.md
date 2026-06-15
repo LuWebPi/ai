@@ -15,3 +15,4 @@ Nutze Exportieren/Importieren, um dein Modell lokal als Datei zu speichern oder 
 Da das Modell im Browser-Speicher liegt, gehen die Daten beim Neuladen der Seite verloren, sofern du sie nicht vorher exportiert hast.
 
 # Beispieldateien:
+https://github.com/LuWebPi/ai-data
