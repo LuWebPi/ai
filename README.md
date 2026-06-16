@@ -1,4 +1,4 @@
-# ai
+# Blobb Ai
 VisionTrainer Single-File
 Ein einfaches Tool, um KI-Objekterkennung direkt im Browser zu trainieren – alles in einer einzigen HTML-Datei.
 # 🚀 Funktionen
