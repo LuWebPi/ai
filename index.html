@@ -4,287 +4,174 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>KI-Bild-Klassifizierung</title>
-    <!-- TensorFlow.js und die benötigten Basis-Modelle -->
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/knn-classifier"></script>
     
     <style>
         body { font-family: sans-serif; text-align: center; padding: 20px; background-color: #f4f7f6; color: #333; margin: 0; }
-        
         .media-container { display: flex; justify-content: center; margin-bottom: 15px; width: 100%; }
         .media-wrapper { display: inline-block; width: 100%; max-width: 400px; }
-        video, img.preview { width: 100%; display: block; border: 3px solid #ccc; border-radius: 8px; background: #fff; box-shadow: 0 4px 6px rgba(0,0,0,0.1); box-sizing: border-box; }
-
-        .status { color: #0056b3; font-weight: bold; margin: 10px; min-height: 1.2em; font-size: 1.1em; }
+        video, img.preview { width: 100%; display: block; border: 3px solid #ccc; border-radius: 8px; background: #fff; box-shadow: 0 4px 6px rgba(0,0,0,0.1); min-height: 200px; }
+        .status { color: #0056b3; font-weight: bold; margin: 10px; min-height: 1.2em; }
         .controls { background: #fff; padding: 15px; margin: 10px auto; border-radius: 8px; max-width: 500px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
-        select, input[type="file"], input[type="text"] { padding: 8px; margin: 5px; font-size: 15px; border: 1px solid #ccc; border-radius: 4px; width: 80%; max-width: 300px; }
-        button { padding: 10px 15px; margin: 5px; cursor: pointer; background-color: #007bff; color: white; border: none; border-radius: 4px; font-size: 15px; transition: background 0.2s; font-weight: bold; }
-        button:hover { background-color: #0056b3; }
-        .btn-secondary { background-color: #6c757d; }
-        .btn-secondary:hover { background-color: #5a6268; }
-        .btn-success { background-color: #28a745; }
-        .btn-success:hover { background-color: #218838; }
-        
-        h1 { color: #2c3e50; }
-        .source-toggle { margin-bottom: 10px; font-size: 16px; }
-        .source-toggle label { margin: 0 10px; cursor: pointer; }
-        .live-toggle { background: #e9ecef; padding: 10px; border-radius: 8px; margin-top: 15px; border: 1px solid #ccc;}
-        
-        #result-box {
-            font-size: 1.5em;
-            margin: 15px auto;
-            padding: 15px;
-            background-color: #e2f0d9;
-            border: 2px solid #548235;
-            border-radius: 8px;
-            max-width: 400px;
-            font-weight: bold;
-            color: #2e5319;
-            display: none;
-        }
+        #result-box { font-size: 1.5em; margin: 15px auto; padding: 15px; background-color: #e2f0d9; border: 2px solid #548235; border-radius: 8px; max-width: 400px; color: #2e5319; display: none; }
     </style>
 </head>
 <body>
-    <h1>Objekt-Klassifizierung</h1>
-    <p>Trainieren Sie das Modell zur Erkennung spezifischer Bildmerkmale.</p>
+    <h1>KI-Bild-Klassifizierung</h1>
 
-    <!-- KAMERA / BILD AUSWAHL -->
-    <div class="controls source-toggle">
-        <label><input type="radio" name="mediaSource" value="camera" checked onchange="toggleMediaSource()"> Kamera verwenden</label>
-        <label><input type="radio" name="mediaSource" value="image" onchange="toggleMediaSource()"> Bild hochladen</label>
+    <div class="controls">
+        <label><input type="radio" name="mediaSource" value="camera" checked onchange="toggleMediaSource()"> Kamera</label>
+        <label><input type="radio" name="mediaSource" value="image" onchange="toggleMediaSource()"> Datei</label>
     </div>
-    
+
     <div id="cameraWrapper" class="controls">
         <select id="videoSource">
-            <option value="environment">Rückkamera (Umgebung)</option>
-            <option value="user">Frontkamera (Benutzer)</option>
+            <option value="environment">Rückkamera</option>
+            <option value="user">Frontkamera</option>
         </select>
     </div>
 
     <div id="imageWrapper" class="controls" style="display: none;">
-        <input type="file" id="imageInput" accept="image/*" onchange="handleImageUpload(event)">
+        <input type="file" id="imageInput" accept="image/*" multiple onchange="handleImageUpload(event)">
     </div>
     
-    <!-- VIDEOPLAYER / BILD -->
     <div class="media-container">
         <div class="media-wrapper">
-            <video id="video" autoplay playsinline></video>
+            <video id="video" autoplay playsinline muted></video>
             <img id="uploadedImage" class="preview" style="display: none;" alt="Vorschau">
         </div>
     </div>
     
-    <div id="status" class="status">Initialisiere Modell-Umgebung...</div>
+    <div id="status" class="status">System bereit.</div>
     <div id="result-box">Klassifizierung: -</div>
     
-    <!-- EIGENES MODELL STEUERUNG -->
     <div class="controls">
-        <input type="text" id="labelInput" placeholder="Klassenbezeichnung (z.B. Schlüssel)">
-        <button onclick="train()">Trainingsdaten erfassen</button>
-        <button onclick="predict()" class="btn-secondary">Bild klassifizieren</button>
-        
-        <div class="live-toggle">
-            <label style="font-weight: bold; cursor: pointer;">
-                <input type="checkbox" id="liveKnnToggle" onchange="toggleLiveKnn()"> Kontinuierliche Klassifizierung
-            </label>
-            <p style="font-size: 0.8em; margin-top: 5px; color: #666;">(Automatische Auswertung des Videostreams)</p>
-        </div>
+        <input type="text" id="labelInput" placeholder="Klassenbezeichnung">
+        <button onclick="train()">Trainieren</button>
+        <button onclick="predict()">Klassifizieren</button>
+        <br>
+        <input type="checkbox" id="liveKnnToggle" onchange="toggleLiveKnn()"> Kontinuierliche Analyse
     </div>
 
-    <!-- SPEICHER FUNKTIONEN -->
     <div class="controls">
-        <button onclick="exportModel()" class="btn-success">Modell exportieren</button>
-        <br><br>
-        <label for="importFile" style="font-size: 14px; font-weight: bold;">Vorhandenes Modell importieren:</label>
-        <br>
+        <button onclick="exportModel()">Exportieren</button>
         <input type="file" id="importFile" accept=".json" onchange="importModel(event)">
     </div>
 
     <script>
         const video = document.getElementById('video');
-        const videoSelect = document.getElementById('videoSource');
         const uploadedImage = document.getElementById('uploadedImage');
         const statusDiv = document.getElementById('status');
         const resultBox = document.getElementById('result-box');
-        
-        // KI Modelle
         const classifier = knnClassifier.create();
-        let net;
-        
-        // State
-        let currentStream;
-        let useCamera = true;
-        let isLiveKnnActive = false;
-        let isPredicting = false;
+        let net, currentStream, isLiveKnnActive = false;
 
         async function setup() {
-            updateStatus("Lade Basis-Modell...");
             net = await mobilenet.load();
-            
-            videoSelect.onchange = startStream;
-            await startStream();
-            updateStatus("System bereit. Bitte erfassen Sie Trainingsdaten.");
+            startStream();
         }
 
         async function startStream() {
-            if (currentStream) {
-                currentStream.getTracks().forEach(track => track.stop());
-            }
-            const constraints = { video: { facingMode: { exact: videoSelect.value } } };
             try {
+                const constraints = { video: { facingMode: "environment" } };
                 currentStream = await navigator.mediaDevices.getUserMedia(constraints);
-            } catch (err) {
-                currentStream = await navigator.mediaDevices.getUserMedia({ video: true });
-            }
-            video.srcObject = currentStream;
+                video.srcObject = currentStream;
+            } catch (err) { console.error(err); }
         }
 
         function toggleMediaSource() {
-            const source = document.querySelector('input[name="mediaSource"]:checked').value;
-            useCamera = (source === 'camera');
-            
-            if (useCamera) {
-                document.getElementById('cameraWrapper').style.display = 'block';
-                document.getElementById('imageWrapper').style.display = 'none';
-                video.style.display = 'block';
-                uploadedImage.style.display = 'none';
-                startStream();
-            } else {
-                document.getElementById('cameraWrapper').style.display = 'none';
-                document.getElementById('imageWrapper').style.display = 'block';
-                video.style.display = 'none';
-                uploadedImage.style.display = 'block';
-                if (currentStream) currentStream.getTracks().forEach(track => track.stop());
-            }
-            
-            if(isLiveKnnActive) {
-                document.getElementById('liveKnnToggle').checked = false;
-                toggleLiveKnn();
-            }
+            const useCamera = document.querySelector('input[name="mediaSource"]:checked').value === 'camera';
+            document.getElementById('cameraWrapper').style.display = useCamera ? 'block' : 'none';
+            document.getElementById('imageWrapper').style.display = useCamera ? 'none' : 'block';
+            video.style.display = useCamera ? 'block' : 'none';
+            uploadedImage.style.display = useCamera ? 'none' : 'block';
         }
 
         function handleImageUpload(event) {
-            const file = event.target.files[0];
-            if (file) {
+            const files = event.target.files;
+            if (files.length > 0) {
                 const reader = new FileReader();
-                reader.onload = function(e) {
-                    uploadedImage.src = e.target.result;
-                    updateStatus("Bild erfolgreich geladen.");
-                }
-                reader.readAsDataURL(file);
+                reader.onload = (e) => { uploadedImage.src = e.target.result; };
+                reader.readAsDataURL(files[0]);
+                updateStatus(files.length + " Bild(er) geladen.");
             }
         }
 
-        function getActiveMedia() {
-            return useCamera ? video : uploadedImage;
+        function loadImageAsync(file) {
+            return new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const img = new Image();
+                    img.onload = () => resolve(img);
+                    img.src = e.target.result;
+                };
+                reader.readAsDataURL(file);
+            });
         }
 
         function updateStatus(msg) { statusDiv.innerText = msg; }
 
         async function train() {
             const label = document.getElementById('labelInput').value;
-            if(!label) return updateStatus("⚠️ Bitte geben Sie eine Klassenbezeichnung ein.");
-            const media = getActiveMedia();
-            if(!useCamera && !media.src) return updateStatus("⚠️ Es wurde kein Bild geladen.");
-
-            updateStatus(`Erfasse Daten für Klasse: "${label}"...`);
+            if(!label) return updateStatus("Klassennamen eingeben!");
+            const useCamera = document.querySelector('input[name="mediaSource"]:checked').value === 'camera';
+            const element = useCamera ? video : (document.getElementById('imageInput').files[0] ? uploadedImage : null);
+            if(!element) return updateStatus("Keine Quelle gefunden!");
             
-            const activation = net.infer(media, true);
+            // Infer mit cast auf HTMLVideoElement oder HTMLImageElement
+            const activation = net.infer(element, true);
             classifier.addExample(activation, label);
-            
-            updateStatus(`✅ Datenpunkt für "${label}" hinzugefügt.`);
+            updateStatus("Trainiert: " + label);
         }
 
         async function predict() {
-            if(classifier.getNumClasses() === 0) {
-                updateStatus("⚠️ Das Modell enthält noch keine Trainingsdaten.");
-                return;
-            }
-            const media = getActiveMedia();
-            if(!useCamera && !media.src) return;
-
-            if (isPredicting) return;
-            isPredicting = true;
-
-            try {
-                const activation = net.infer(media, true);
-                
-                const dataset = classifier.getClassifierDataset();
-                let totalExamples = 0;
-                for (const key in dataset) totalExamples += dataset[key].shape[0];
-                const k = Math.min(10, totalExamples);
-                
-                const result = await classifier.predictClass(activation, k);
-                const wahrscheinlichkeit = Math.round(result.confidences[result.label] * 100);
-                
-                resultBox.style.display = 'block';
-                resultBox.innerText = `Klasse: ${result.label} (${wahrscheinlichkeit}%)`;
-                
-                if(!isLiveKnnActive) updateStatus("Klassifizierung abgeschlossen.");
-            } catch (e) {
-                console.error(e);
-            } finally {
-                isPredicting = false;
-            }
+            if(classifier.getNumClasses() === 0) return;
+            const useCamera = document.querySelector('input[name="mediaSource"]:checked').value === 'camera';
+            const element = useCamera ? video : uploadedImage;
+            const activation = net.infer(element, true);
+            const res = await classifier.predictClass(activation);
+            resultBox.style.display = 'block';
+            resultBox.innerText = `Klasse: ${res.label} (${Math.round(res.confidences[res.label] * 100)}%)`;
         }
 
         function toggleLiveKnn() {
             isLiveKnnActive = document.getElementById('liveKnnToggle').checked;
-            if (isLiveKnnActive) {
-                if(classifier.getNumClasses() === 0) {
-                    alert("Es sind keine Trainingsdaten vorhanden. Bitte trainieren Sie das Modell zuerst.");
-                    document.getElementById('liveKnnToggle').checked = false;
-                    isLiveKnnActive = false;
-                    return;
-                }
-                updateStatus("Kontinuierliche Klassifizierung aktiv... 🟢");
-                predictLiveKnnLoop();
-            } else {
-                updateStatus("Kontinuierliche Klassifizierung pausiert. 🔴");
-            }
+            if(isLiveKnnActive) loop();
         }
 
-        async function predictLiveKnnLoop() {
-            if (!isLiveKnnActive) return;
+        async function loop() {
+            if(!isLiveKnnActive) return;
             await predict();
-            setTimeout(() => requestAnimationFrame(predictLiveKnnLoop), 200); 
-        }
-        
-        function exportModel() {
-            if(classifier.getNumClasses() === 0) return alert("Das Modell ist leer und kann nicht exportiert werden.");
-            const dataset = classifier.getClassifierDataset();
-            const jsonDataset = {};
-            for (const key in dataset) {
-                jsonDataset[key] = dataset[key].arraySync();
-            }
-            const blob = new Blob([JSON.stringify(jsonDataset)], {type: "application/json"});
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = "klassifizierungs_modell.json";
-            a.click();
-            updateStatus("💾 Modell-Export erfolgreich.");
+            setTimeout(() => requestAnimationFrame(loop), 200);
         }
 
         function importModel(event) {
-            const file = event.target.files[0];
-            if(!file) return;
             const reader = new FileReader();
             reader.onload = function(e) {
-                try {
-                    const jsonDataset = JSON.parse(e.target.result);
-                    const tensorDataset = {};
-                    for (const key in jsonDataset) {
-                        tensorDataset[key] = tf.tensor2d(jsonDataset[key]);
-                    }
-                    classifier.setClassifierDataset(tensorDataset);
-                    updateStatus("✅ Modell erfolgreich importiert.");
-                    alert("Der Modell-Import war erfolgreich. Sie können nun fortfahren.");
-                } catch (err) {
-                    updateStatus("❌ Import fehlgeschlagen. Überprüfen Sie das Dateiformat.");
+                const json = JSON.parse(e.target.result);
+                // Wichtig: Beim Import die Tensoren direkt auf Basis der Array-Daten neu erstellen
+                const tensorDataset = {};
+                for (const key in json) {
+                    // Sicherstellen, dass das Format 2D entspricht
+                    tensorDataset[key] = tf.tensor(json[key]);
                 }
+                classifier.setClassifierDataset(tensorDataset);
+                updateStatus("Modell erfolgreich importiert.");
             };
-            reader.readAsText(file);
+            reader.readAsText(event.target.files[0]);
+        }
+
+        function exportModel() {
+            const dataset = classifier.getClassifierDataset();
+            const json = {};
+            for (const key in dataset) json[key] = dataset[key].arraySync();
+            const blob = new Blob([JSON.stringify(json)], {type: "application/json"});
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = "modell.json";
+            a.click();
         }
 
         setup();
